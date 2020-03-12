@@ -1,0 +1,131 @@
+import idx2numpy
+import numpy as np
+import random
+from numpy import linalg
+from numpy import random
+from scipy import spatial
+import matplotlib.pyplot as plt
+
+"""
+--------------- K-MEANs Clustering --------------------------------------------
+"""
+
+def calcEuclidean(x, y):
+    sum = 0;
+    for i in range(0, len(x)):
+        sum += (abs(x[i] - y[i]))**2
+    return np.sqrt(sum);
+
+def calcManhattan(x, y):
+    sum = 0;
+    for i in range(0, len(x)):
+        sum += abs(x[i] - y[i])
+    return sum;
+
+def stoppingCondition(X, Y):
+    for i in range(0, len(X)):
+        if (X[i] != Y[i]):
+            return True;
+    return False;
+
+def calcQuality(k, clusters, lbls, distribution, classes):
+    entropies = []
+    purities = []
+    cluster_Distribution = np.zeros((k, classes));
+    for i in range(0, len(lbls)):
+        cluster = clusters[i]
+        class_ = lbls[i]
+        cluster_Distribution[int(cluster)][int(class_)] += 1;
+    for i in range(0, k):
+        sum = 0;
+        max = 0;
+        current_cluster = cluster_Distribution[i]
+        for j in range(0, classes):
+            ratio = current_cluster[j] / distribution[j]
+            print("ratio: ", ratio);
+            if ratio > max:
+                max = ratio
+            if (ratio > 0):
+                sum += ratio * np.log2(ratio);
+                print("entered sum: ", sum);
+        purities.append(max);
+        entropies.append(-1*sum);
+
+    return entropies, purities;
+
+def calcVars(k, means, clusters, features, sizes, size):
+    #size = 784
+    vars = np.zeros((k, size, size));
+    for i in range(0, features.shape[0]):
+        cluster = int(clusters[i]);
+        diff = np.array((size, 1));
+        diff = np.subtract(features[i], means[cluster]);
+        #print(diff.shape)
+        diff_shape = diff.reshape((-1, 1))
+        #print(diff_shape.shape)
+        mult = np.matmul(diff_shape, diff_shape.reshape((1, size)));
+        #print(mult.shape)
+        vars[cluster] += mult;
+    for i in range(0, len(sizes)):
+        vars[i] = vars[i]/sizes[i];
+    return vars;
+
+def calcDistribution(lbls, classes=10):
+    distribution = np.zeros((classes, ));
+    for i in range(0, len(lbls)):
+        index = lbls[i];
+        distribution[index] += 1;
+    return distribution;
+
+def applyKMeans(k, d, trainSamples, features, lbls, size, classes):
+    centroids = np.ndarray((k, size));
+    choices = np.arange(1, trainSamples + 1, 1);
+    clusters = np.ndarray((trainSamples,));
+    sizes = np.zeros((k,));
+    temp = features
+    didChange = True
+
+    # Get initial centroids
+    for i in range(0, k):
+        choice = np.random.choice(choices);
+        sample = temp[choice]
+        centroids[i] = sample;
+
+
+    iteration = 1
+    while (didChange):
+        # Compute Cluster membership
+        min_distances = np.full((trainSamples,), np.inf);
+        for i in range(0, centroids.shape[0]):
+            for j in range(0, trainSamples):
+                dist = d(centroids[i], features[j]);
+                #print(dist)
+                if min_distances[j] > dist:
+                    clusters[j] = i;
+                    min_distances[j] = dist;
+
+        new_centroids = np.zeros((k, size));
+
+        #Calc new centroids
+        new_sizes = np.zeros((k,));
+        for j in range(0, trainSamples):
+            index = int(clusters[j])
+            feature = features[j];
+            new_centroids[index] += feature;
+            new_sizes[index] += 1;
+
+        new_centroids = [new_centroids[x]/new_sizes[x] for x in range(0, sizes.shape[0])];
+        didChange = stoppingCondition(sizes, new_sizes);
+        new_centroids = np.asarray(new_centroids)
+        centroids = new_centroids;
+        sizes = new_sizes;
+        print('iterations: ', iteration);
+        print('sizes: ', sizes);
+        iteration += 1
+
+    means = centroids.astype(int);
+    vars = calcVars(k, means, clusters, features, sizes, size);
+    distribution = calcDistribution(lbls);
+    entropies, purities = calcQuality(k, clusters, lbls, distribution, classes);
+
+    return means, vars, entropies, purities;
